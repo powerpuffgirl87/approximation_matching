@@ -1,0 +1,4 @@
+This project is to code to generate a maximum weight matching for a graph.
+The current implementation is done using "A Linear Time Approximation Algorithm for
+Weighted Matchings in Graphs" by Doratha E. Drake and Stefan Hougardy.
+
