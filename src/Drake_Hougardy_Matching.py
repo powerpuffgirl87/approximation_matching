@@ -54,9 +54,8 @@ def maximal_matching(graph):
 
     return matchingGraph;
 
+#Augments new edges to the matching and removes old conflicting edges in matching.
 def augmentMatching(graph, matching, newEdges):
-    nodes=[]
-    edges=[]
     for (u,v,d) in newEdges:
         adjNodes=[u,v]
         if matching.has_node(u):
@@ -70,15 +69,20 @@ def augmentMatching(graph, matching, newEdges):
 
     return matching
 
+#Returns weight of the graph
 def graphWeight(graph):
     return edgeListWeight(graph.edges(data=True))
 
+#Returns the sum of all weights of the provided edges.
 def edgeListWeight(ebunch):
     weight = 0
     for (u,v,d) in ebunch:
         weight += d['weight']
     return weight
 
+#Returns all the edges adjacent to 'edges' in matching. If a 'center' edge is given,
+# the method by default includes the weight of the 'center' edge if it is in matching
+# else does not include it. This feature can be changed by modifying 'includeCentre' argument.
 def edgeIncidentMatching(matching, edges, center=None, includeCentre=True):
     edgeList=[]
     computedEdges={}
@@ -98,26 +102,10 @@ def edgeIncidentMatching(matching, edges, center=None, includeCentre=True):
             weight=weight-dxy['weight']
     return (edgeList, weight)
 
+#Returns all the edges adjacent to 'edges' in matching. Includes the weight of the
+# 'center' edge if it is in matching else it is not included.
 def edgeIncidentMatchingWithCenter(matching, edges, center):
     return edgeIncidentMatching(matching,edges,center,True)
-
-def edgeIncidentMarkedNodesWithoutCenter(matching, edge, center):
-    (x,y,dxy) = center
-    nodes=edgeIncidentMarkedNodes(matching,edge, center)
-
-    if(nodes!=None):
-        nodes.difference([x,y])
-
-    return nodes
-
-def edgeIncidentMarkedNodes(matching, edge, center):
-    (x,y,dxy) = center
-    nodes=[]
-    (u,v,d) = edge
-    for node in [u,v]:
-        if node!=x and node!=y and matching.has_node(node) :
-          nodes.append(matching.neighbors(node)[0])
-    return set(nodes)
 
 # Returns top two edges with maximum surplus values
 # edges have 'surplus' attributes as well. Please refer maxAllowable method
@@ -142,6 +130,8 @@ def getMaxTwoSurplusEdges(edges):
 
     return (edge1, edge2)
 
+#Returns the edgelist contributing maximum surplus with 'edge' and the edge in 'edgeList'
+# for the 'center' edge, if any.
 def getMaxNonAdjacentSurplusEdges(matching, edgeList, edge, center):
     maxWinWeight=0;
     z=0
@@ -167,7 +157,8 @@ def getMaxNonAdjacentSurplusEdges(matching, edgeList, edge, center):
 
     return (surplusEdgeList1, maxWinWeight)
 
-
+#Returns the two edges adjacent to 'center' edge that contributes maximum positive surplus, if any.
+#The returned edges{a,b} does not form cycle with {a,b,center} U M(a) U M(b)
 def maxAllowable(matching, edges, center):
     (x,y,dxy)=center
     #Edge with maximum surplus
@@ -308,7 +299,7 @@ def getGoodBetaAugmentation(graph, maxNewMatching, center):
         maxBetaAugmentation = aug2
         maxBetaAugmentationWeight = aug2WinValue
 
-    # Find augmentation of two edges a, b such that {a, b, e} union M(a) does not contain a cycle.
+    # Find augmentation of two edges a, b such that {a, b, e} U M(a) does not contain a cycle.
     # Get edges with win(u,v) > 1/2* w(u,v)
     tempWinEdges=[]
     for(u,v,d) in winWeightedEdges:
@@ -349,7 +340,7 @@ def improve_matching (graph, maxMatching):
             print "Beta Aug Selected: "+str(betaAug)
             print "Beta Aug Weight: "+str(betaAugWeight)
             #print "Weight of Edges: "+str(edgeIncidentMatching(maxNewMatching, betaAug)[1])
-
+            
             # Augment maxNewMatching with betaAug
             augmentMatching(graph, maxNewMatching, betaAug)
 
