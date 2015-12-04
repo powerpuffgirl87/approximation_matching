@@ -4,8 +4,6 @@ import networkx as nx
 import random
 import sys, traceback
 
-BETA_PARAMETER = 1.25
-
 #Returns maximum maximal weight matching for a given graph
 #using greedy approach.
 def greedy_maximum_matching(graph):
@@ -132,7 +130,7 @@ def getMaxTwoSurplusEdges(edges):
 
 #Returns the edgelist contributing maximum surplus with 'edge' and the edge in 'edgeList'
 # for the 'center' edge, if any.
-def getMaxNonAdjacentSurplusEdges(matching, edgeList, edge, center):
+def getMaxNonAdjacentSurplusEdges(matching, edgeList, edge, center , betaValue):
     maxWinWeight=0;
     z=0
     (x,y,dxy)=center
@@ -140,7 +138,7 @@ def getMaxNonAdjacentSurplusEdges(matching, edgeList, edge, center):
         z=dxy['weight']
 
     (m,n,dmn)=edge
-    edge1diff = BETA_PARAMETER * z - (dmn['surplus'])
+    edge1diff = betaValue * z - (dmn['surplus'])
 
     surplusEdgeList1=[]
 
@@ -159,7 +157,7 @@ def getMaxNonAdjacentSurplusEdges(matching, edgeList, edge, center):
 
 #Returns the two edges adjacent to 'center' edge that contributes maximum positive surplus, if any.
 #The returned edges{a,b} does not form cycle with {a,b,center} U M(a) U M(b)
-def maxAllowable(matching, edges, center):
+def maxAllowable(matching, edges, center, betaValue):
     (x,y,dxy)=center
     #Edge with maximum surplus
     maxEdges=None
@@ -189,23 +187,29 @@ def maxAllowable(matching, edges, center):
 
     for edge in (xEdge1, xEdge2):
         if edge!=None:
-            xAugList, xWinEdgeValue = getMaxNonAdjacentSurplusEdges(matching, yEdgeList, edge, center)
+            xAugList, xWinEdgeValue = getMaxNonAdjacentSurplusEdges(matching, yEdgeList, edge, center, betaValue)
             if xWinEdgeValue>maxWinValue :
                 maxWinValue = xWinEdgeValue;
                 maxEdges=xAugList
 
     for edge in (yEdge1, yEdge2):
         if edge!=None:
-            yAugList, yWinEdgeValue = getMaxNonAdjacentSurplusEdges(matching, xEdgeList, edge, center)
+            yAugList, yWinEdgeValue = getMaxNonAdjacentSurplusEdges(matching, xEdgeList, edge, center, betaValue)
             if yWinEdgeValue>maxWinValue :
                 maxWinValue = yWinEdgeValue;
                 maxEdges=yAugList
 
     return (maxEdges, maxWinValue)
 
+def getNextBetaValue(currentWeight):
+    newBetaWeight= (4.0+9.0*currentWeight*(4.0+currentWeight))/48.0
+    newBetaValue= 4.0/(2.0 + 3.0* newBetaWeight)
+
+    return (newBetaWeight, newBetaValue)
+
 # Computes an optimal possible augmentation for the edge node1<-->node2
 # Here we consider all edges a belongs to E\ M that is adjacent with center., the win
-def getGoodBetaAugmentation(graph, maxNewMatching, center):
+def getGoodBetaAugmentation(graph, maxNewMatching, center , betaValue):
     (node1, node2, dxy) = center
     centerWeightInMatching = (0,dxy['weight'])[maxNewMatching.has_edge(node1,node2)]
 
@@ -234,7 +238,7 @@ def getGoodBetaAugmentation(graph, maxNewMatching, center):
             #New dictionary to hold extra attributes
             du=dict(d)
             du['win'] = tempWinEdge
-            du['surplus'] = du['weight'] - BETA_PARAMETER*(edgeIncWeight-centerWeightInMatching)
+            du['surplus'] = du['weight'] - betaValue*(edgeIncWeight-centerWeightInMatching)
             winWeightedEdges.append((u,v,du))
 
             #Check if the edge has maximum win
@@ -305,13 +309,13 @@ def getGoodBetaAugmentation(graph, maxNewMatching, center):
     for(u,v,d) in winWeightedEdges:
         if(d['win']>= 0.5*dxy['weight']) :
             tempWinEdges.append((u,v,d))
-    augTemp, augTempWinValue = maxAllowable(maxNewMatching, tempWinEdges, center)
+    augTemp, augTempWinValue = maxAllowable(maxNewMatching, tempWinEdges, center, betaValue)
 
     if augTempWinValue > maxBetaAugmentationWeight :
         maxBetaAugmentationWeight = augTempWinValue
         maxBetaAugmentation=augTemp
 
-    augTemp, augTempWinValue = maxAllowable(maxNewMatching, winWeightedEdges, center)
+    augTemp, augTempWinValue = maxAllowable(maxNewMatching, winWeightedEdges, center, betaValue)
     if augTempWinValue > maxBetaAugmentationWeight :
         maxBetaAugmentationWeight = augTempWinValue
         maxBetaAugmentation=augTemp
@@ -319,7 +323,7 @@ def getGoodBetaAugmentation(graph, maxNewMatching, center):
     return maxBetaAugmentation, maxBetaAugmentationWeight
 
 # Computes a better weight matching for a graph given its maximum maximal matching
-def improve_matching (graph, maxMatching):
+def improve_matching (graph, maxMatching, betaValue):
     maxNewMatching = nx.Graph(maxMatching)
 
     # for each edges e belongs to maxMatching, check if there exists a good beta aug in maxNewMatching.
@@ -334,7 +338,7 @@ def improve_matching (graph, maxMatching):
             if maxNewMatching.has_node(v):
                 currWeight+=maxNewMatching.get_edge_data(v, maxNewMatching.neighbors(v)[0])['weight']
 
-        betaAug, betaAugWeight = getGoodBetaAugmentation(graph, maxNewMatching, (u,v,d));
+        betaAug, betaAugWeight = getGoodBetaAugmentation(graph, maxNewMatching, (u,v,d), betaValue);
 
         if betaAug != None :
             print "Beta Aug Selected: "+str(betaAug)
@@ -346,10 +350,28 @@ def improve_matching (graph, maxMatching):
 
     return maxNewMatching
 
+#TODO - Test this module
+def multi_improve_matching(graph):
+    matching = maximal_matching(graph);
+    currentBetaWeight = 0.5
+
+    #Get BetaValue
+    newBetaWeight, betaValue=getNextBetaValue(currentBetaWeight)
+    while newBetaWeight -currentBetaWeight > 0.1 :
+        matching = improve_matching(graph, matching, betaValue)
+
+        print "Matching weight: " + str(graphWeight(matching))
+
+        currentBetaWeight = newBetaWeight
+        newBetaWeight, betaValue=getNextBetaValue(currentBetaWeight)
+
+    return matching
+
 if __name__ == "__main__":
     try:
         graph = nx.Graph()
         numNodes = 5
+        betaValue=1.25
 
         #Add vertices
         for node1 in range(numNodes):
@@ -369,7 +391,7 @@ if __name__ == "__main__":
         print "maximal matching weight" + str(graphWeight(t))
         print t.edges(data=True)
 
-        b=improve_matching(graph, t)
+        b=improve_matching(graph, t, betaValue)
 
         print "Improved weight" + str(graphWeight(b))
         print b.edges(data=True)
