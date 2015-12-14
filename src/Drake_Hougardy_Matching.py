@@ -2,6 +2,7 @@
 
 import networkx as nx
 import random
+from datetime import datetime
 import sys, traceback
 
 #Returns maximum maximal weight matching for a given graph
@@ -92,7 +93,7 @@ def edgeIncidentMatching(matching, edges, center=None, includeCentre=True):
                     key=str(sorted([k,node]))
                     if(not computedEdges.has_key(key)):
                         computedEdges[key]=1
-                        edgeList.append([(node, k, kd)])
+                        edgeList.append((node, k, kd))
                         weight += kd['weight']
     if not includeCentre:
         (x,y,dxy) = center
@@ -275,8 +276,8 @@ def getGoodBetaAugmentation(graph, maxNewMatching, center , betaValue):
             bTemp=None
             for v, d in graph[u].iteritems() :
                 if v != p and v!= q:
-                    edgeIncMatchingWC = edgeIncidentMatchingWithCenter(maxNewMatching, [aug2[0], (u,v,d)], center);
-                    tempWinEdge = d['weight'] +aWeight - edgeListWeight(edgeIncMatchingWC)
+                    (edgeIncMatchingWC, edgeIncWeight) = edgeIncidentMatchingWithCenter(maxNewMatching, [aug2[0], (u,v,d)], center);
+                    tempWinEdge = d['weight'] +aWeight - edgeIncWeight
                     if tempWinEdge>aug2WinValue :
                         bTemp = (u,v,d)
                         aug2WinValue=tempWinEdge
@@ -324,25 +325,25 @@ def getGoodBetaAugmentation(graph, maxNewMatching, center , betaValue):
 
 # Computes a better weight matching for a graph given its maximum maximal matching
 def improve_matching (graph, maxMatching, betaValue):
+
+    #Make maxMatching Maximal
+    matchingNodesSet = set(maxMatching.nodes())
+    graphNodesSet = set(graph.nodes())
+    differenceNodes = graphNodesSet - matchingNodesSet
+    if(differenceNodes > 1) :
+        tempMatching = maximal_matching(graph.subgraph(differenceNodes))
+        maxMatching.add_edges_from(tempMatching.edges(data=True))
+
+    # Copy matching to new Matching M'
     maxNewMatching = nx.Graph(maxMatching)
 
     # for each edges e belongs to maxMatching, check if there exists a good beta aug in maxNewMatching.
     for (u,v,d) in maxMatching.edges(data=True):
-        currWeight=0
-        if maxNewMatching.has_edge(u,v):
-            currWeight=d['weight']
-        else:
-            if maxNewMatching.has_node(u):
-                currWeight+=maxNewMatching.get_edge_data(u, maxNewMatching.neighbors(u)[0])['weight']
-
-            if maxNewMatching.has_node(v):
-                currWeight+=maxNewMatching.get_edge_data(v, maxNewMatching.neighbors(v)[0])['weight']
-
         betaAug, betaAugWeight = getGoodBetaAugmentation(graph, maxNewMatching, (u,v,d), betaValue);
 
         if betaAug != None :
-            print "Beta Aug Selected: "+str(betaAug)
-            print "Beta Aug Weight: "+str(betaAugWeight)
+            #print "Beta Aug Selected: "+str(betaAug)
+            #print "Beta Aug Weight: "+str(betaAugWeight)
             #print "Weight of Edges: "+str(edgeIncidentMatching(maxNewMatching, betaAug)[1])
             
             # Augment maxNewMatching with betaAug
@@ -350,17 +351,31 @@ def improve_matching (graph, maxMatching, betaValue):
 
     return maxNewMatching
 
+def weight_of_matching(graph, matching):
+    weight = 0
+    for x, y in matching.items():
+        weight += graph.edge[x][y]["weight"]
+    return weight / 2
+
 #TODO - Test this module
-def multi_improve_matching(graph):
+def multi_improve_matching(graph, exactMaxMatchingWeight=None):
     matching = maximal_matching(graph);
     currentBetaWeight = 0.5
+    iteration = 0
 
     #Get BetaValue
     newBetaWeight, betaValue=getNextBetaValue(currentBetaWeight)
-    while newBetaWeight -currentBetaWeight > 0.1 :
-        matching = improve_matching(graph, matching, betaValue)
+    currMatchingWeight = graphWeight(matching)
 
-        print "Matching weight: " + str(graphWeight(matching))
+    while currMatchingWeight/exactMaxMatchingWeight < 0.67:
+        iteration += 1
+        print "Befre Improve Matching weight: " + str(currMatchingWeight)
+        matching = improve_matching(graph, matching, betaValue)
+        currMatchingWeight = graphWeight(matching)
+
+        print "After Improve Matching weight: " + str(currMatchingWeight)
+        print "iteration: "+ str(iteration)
+        print "Ratio: "+ str(currMatchingWeight/exactMaxMatchingWeight)
 
         currentBetaWeight = newBetaWeight
         newBetaWeight, betaValue=getNextBetaValue(currentBetaWeight)
@@ -368,9 +383,8 @@ def multi_improve_matching(graph):
     return matching
 
 if __name__ == "__main__":
-    try:
         graph = nx.Graph()
-        numNodes = 5
+        numNodes = 100
         betaValue=1.25
 
         #Add vertices
@@ -378,33 +392,40 @@ if __name__ == "__main__":
             graph.add_node(node1)
 
         #Add edges - complete graph
-        #for node1 in range(numNodes):
-        #    for node2 in range(node1+1, numNodes):
-        #        graph.add_edge(node1, node2, weight=(node1+node2)*2)
-        graph.add_weighted_edges_from([(0,1,13.0),(1,2,7),(2,0,15), (3,0,12), (3,4,20), (4,0,21) ])
+        for node1 in range(numNodes):
+            for node2 in range(node1+1, numNodes):
+                graph.add_edge(node1, node2, weight=random.uniform(5,40))
+                #graph.add_weighted_edges_from([(0,1,13.0),(1,2,7),(2,0,15), (3,0,12), (3,4,20), (4,0,21) ])
 
         #Display
         print("original graph")
         #print graph.edges(data=True)
 
-        t=maximal_matching(graph);
-        print "maximal matching weight" + str(graphWeight(t))
-        print t.edges(data=True)
+        #t=maximal_matching(graph);
+        #print "maximal matching weight" + str(graphWeight(t))
+        #print t.edges(data=True)
 
-        b=improve_matching(graph, t, betaValue)
+        exact_matching = nx.max_weight_matching(graph)
+        exactMaxMatchingWeight = weight_of_matching(graph, exact_matching)
+        print "Exact Matching weight" + str(exactMaxMatchingWeight)
 
-        print "Improved weight" + str(graphWeight(b))
-        print b.edges(data=True)
+        #b=improve_matching(graph, t, betaValue)
+        startTime = datetime.now()
+        b=multi_improve_matching(graph, exactMaxMatchingWeight)
+        elapsedTime = datetime.now() - startTime
+        improvedWeight = graphWeight(b)
+        print "Improved weight" + str(improvedWeight)
+        print "Improved Ratio  : " + str(improvedWeight/exactMaxMatchingWeight)
+        print "Time taken(sec) : " + str(elapsedTime.seconds + elapsedTime.microseconds/1E6)
+        #print b.edges(data=True)
 
+
+        startTime = datetime.now()
         t=greedy_maximum_matching(graph)
-
-        print "Maximum Maximal Matching graph"
-        print t.edges(data=True)
-        print "Greedy weight" + str(graphWeight(t))
-
-    except:
-        print "exception"
-        print "Exception in user code:"
-        print '-'*60
-        traceback.print_exc(file=sys.stdout)
-        print '-'*60
+        elapsedTime = datetime.now() - startTime
+        greedyWeight = graphWeight(t);
+        print "\nGreedy weight  : " + str(greedyWeight)
+        print "Greedy Ratio  : " + str(greedyWeight/exactMaxMatchingWeight)
+        print "Time taken(sec) : " + str(elapsedTime.seconds + elapsedTime.microseconds/1E6)
+        #print "Maximum Maximal Matching graph"
+        #print t.edges(data=True)
