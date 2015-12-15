@@ -106,6 +106,11 @@ def edgeIncidentMatching(matching, edges, center=None, includeCentre=True):
 def edgeIncidentMatchingWithCenter(matching, edges, center):
     return edgeIncidentMatching(matching,edges,center,True)
 
+#Returns all the edges adjacent to 'edges' in matching. Excludes the weight of the
+# 'center' edge irrespective of if it is in matching.
+def edgeIncidentMatchingWithoutCenter(matching, edges, center):
+    return edgeIncidentMatching(matching,edges,center,False)
+
 # Returns top two edges with maximum surplus values
 # edges have 'surplus' attributes as well. Please refer maxAllowable method
 def getMaxTwoSurplusEdges(edges):
@@ -185,20 +190,20 @@ def maxAllowable(matching, edges, center, betaValue):
     #Find top two edges with maximum surplus
     (xEdge1, xEdge2) = getMaxTwoSurplusEdges(xEdgeList)
     (yEdge1, yEdge2) = getMaxTwoSurplusEdges(yEdgeList)
+    xResultEdgeList = [x for x in [xEdge1, xEdge2] if x is not None]
+    yResultEdgeList = [x for x in [yEdge1, yEdge2] if x is not None]
 
-    for edge in (xEdge1, xEdge2):
-        if edge!=None:
-            xAugList, xWinEdgeValue = getMaxNonAdjacentSurplusEdges(matching, yEdgeList, edge, center, betaValue)
-            if xWinEdgeValue>maxWinValue :
-                maxWinValue = xWinEdgeValue;
-                maxEdges=xAugList
+    for edge in xResultEdgeList:
+        xAugList, xWinEdgeValue = getMaxNonAdjacentSurplusEdges(matching, yEdgeList, edge, center, betaValue)
+        if xWinEdgeValue>maxWinValue :
+            maxWinValue = xWinEdgeValue;
+            maxEdges=xAugList
 
-    for edge in (yEdge1, yEdge2):
-        if edge!=None:
-            yAugList, yWinEdgeValue = getMaxNonAdjacentSurplusEdges(matching, xEdgeList, edge, center, betaValue)
-            if yWinEdgeValue>maxWinValue :
-                maxWinValue = yWinEdgeValue;
-                maxEdges=yAugList
+    for edge in yResultEdgeList:
+        yAugList, yWinEdgeValue = getMaxNonAdjacentSurplusEdges(matching, xEdgeList, edge, center, betaValue)
+        if yWinEdgeValue>maxWinValue :
+            maxWinValue = yWinEdgeValue;
+            maxEdges=yAugList
 
     return (maxEdges, maxWinValue)
 
@@ -240,6 +245,7 @@ def getGoodBetaAugmentation(graph, maxNewMatching, center , betaValue):
             du=dict(d)
             du['win'] = tempWinEdge
             du['surplus'] = du['weight'] - betaValue*(edgeIncWeight-centerWeightInMatching)
+            #du['inc_match_edges'] = edgeIncMatchingWC
             winWeightedEdges.append((u,v,du))
 
             #Check if the edge has maximum win
@@ -299,6 +305,34 @@ def getGoodBetaAugmentation(graph, maxNewMatching, center , betaValue):
                     if(tempWinEdge>aug2WinValue) :
                         aug2=[(node1, v, d), (node2, bNode, bNodeData)]
                         aug2WinValue=tempWinEdge
+    '''
+    # Case-2:  M(a) intersection M(b) contains an edge not incident with an end vertex of center
+    #Another possible implementation for the case exactly as suggested in paper with no optimizations - runs a bit longer
+    aPossibleEdges = graph[node1]
+    markedNodes = {}
+    for v, d in aPossibleEdges.iteritems():
+        if( v != node2 ): #Exclude the center edge and the new edge 'a', Read paper Lemma-2
+            (edgeIncMatchingWC, edgeIncWeight) = edgeIncidentMatchingWithoutCenter(maxNewMatching,[(node1, v, d)], center)
+            for (m,n,dmn) in edgeIncMatchingWC :
+                if(node1 not in [m,n]):
+                    keyNode= m if m!=v else n
+                    if(not markedNodes.has_key(keyNode)):
+                        markedNodes[keyNode] = {'node' :[]}
+                    markedNodes[keyNode]['node'].append(v)
+
+    bPossibleEdges = graph[node2]
+    for v, d in bPossibleEdges.iteritems():
+        if( v != node1 and markedNodes.has_key(v)): #Exclude the center edge and the new edge 'a', Read paper Lemma-2
+            #Check Beta Augmentation
+            bMarkedNode=markedNodes[v]['node'][0]
+            bMarkedNodeData=graph.get_edge_data(node1, bMarkedNode)
+            (edgeIncMatchingWC, edgeIncWeight) = edgeIncidentMatchingWithCenter(maxNewMatching,
+                                                                [(node2, v, d), (node1, bMarkedNode, bMarkedNodeData)], center)
+            tempWinEdge = d['weight'] + bMarkedNodeData['weight'] - edgeIncWeight
+            if(tempWinEdge>aug2WinValue) :
+                aug2=[(node2, v, d), (node1, bMarkedNode, bMarkedNodeData)]
+                aug2WinValue=tempWinEdge
+    '''
 
     if(aug2WinValue > maxBetaAugmentationWeight) :
         maxBetaAugmentation = aug2
@@ -377,14 +411,13 @@ def multi_improve_matching(graph, exactMaxMatchingWeight=None):
         print "iteration: "+ str(iteration)
         print "Ratio: "+ str(currMatchingWeight/exactMaxMatchingWeight)
 
-        currentBetaWeight = newBetaWeight
-        newBetaWeight, betaValue=getNextBetaValue(currentBetaWeight)
+        newBetaWeight, betaValue=getNextBetaValue(newBetaWeight)
 
     return matching
 
 if __name__ == "__main__":
         graph = nx.Graph()
-        numNodes = 100
+        numNodes = 50
         betaValue=1.25
 
         #Add vertices
@@ -395,10 +428,11 @@ if __name__ == "__main__":
         for node1 in range(numNodes):
             for node2 in range(node1+1, numNodes):
                 graph.add_edge(node1, node2, weight=random.uniform(5,40))
-                #graph.add_weighted_edges_from([(0,1,13.0),(1,2,7),(2,0,15), (3,0,12), (3,4,20), (4,0,21) ])
+
+        #graph.add_weighted_edges_from([(0,1,13.0),(1,2,7),(2,0,15), (3,0,12), (3,4,20), (4,0,21) ])
 
         #Display
-        print("original graph")
+        #print("original graph")
         #print graph.edges(data=True)
 
         #t=maximal_matching(graph);
@@ -407,14 +441,15 @@ if __name__ == "__main__":
 
         exact_matching = nx.max_weight_matching(graph)
         exactMaxMatchingWeight = weight_of_matching(graph, exact_matching)
-        print "Exact Matching weight" + str(exactMaxMatchingWeight)
+        print "Exact Matching weight : " + str(exactMaxMatchingWeight)
 
-        #b=improve_matching(graph, t, betaValue)
         startTime = datetime.now()
+        #Call Algorithm
         b=multi_improve_matching(graph, exactMaxMatchingWeight)
+
         elapsedTime = datetime.now() - startTime
         improvedWeight = graphWeight(b)
-        print "Improved weight" + str(improvedWeight)
+        print "\nImproved weight : " + str(improvedWeight)
         print "Improved Ratio  : " + str(improvedWeight/exactMaxMatchingWeight)
         print "Time taken(sec) : " + str(elapsedTime.seconds + elapsedTime.microseconds/1E6)
         #print b.edges(data=True)
